@@ -1,0 +1,86 @@
+@APIPedidos_HostAddress = http://localhost:5180
+
+GET {{APIPedidos_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+### Consultar todos los productos
+GET https://localhost:7001/api/products
+Accept: application/json
+
+### Consultar un producto específico
+GET https://localhost:7001/api/products/1
+Accept: application/json
+
+### Crear un nuevo producto
+POST https://localhost:7001/api/products
+Content-Type: application/json
+
+{
+  "name": "Nuevo Producto",
+  "description": "Descripción del nuevo producto",
+  "price": 99.99,
+  "stockQuantity": 20
+}
+
+### Actualizar un producto existente
+PUT https://localhost:7001/api/products/1
+Content-Type: application/json
+
+{
+  "name": "Laptop HP Pavilion Actualizada",
+  "description": "Laptop de 15 pulgadas con procesador Intel i5 - Versión actualizada",
+  "price": 949.99,
+  "stockQuantity": 8
+}
+
+### Eliminar un producto (solo si no está en órdenes)
+DELETE https://localhost:7001/api/products/5
+Accept: application/json
+
+### Crear una nueva orden
+POST https://localhost:7001/api/orders
+Content-Type: application/json
+
+### Agregar un ítem a la orden (ID 1)
+POST https://localhost:7001/api/orders/1/items
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 2
+}
+
+### Agregar otro ítem a la orden (ID 1)
+POST https://localhost:7001/api/orders/1/items
+Content-Type: application/json
+
+{
+  "productId": 2,
+  "quantity": 1
+}
+
+### Cambiar el estado de la orden a "Pagado"
+PUT https://localhost:7001/api/orders/1/state
+Content-Type: application/json
+
+{
+  "state": "Pagado"
+}
+
+### Cambiar el estado de la orden a "Enviado"
+PUT https://localhost:7001/api/orders/1/state
+Content-Type: application/json
+
+{
+  "state": "Enviado"
+}
+
+### Consultar todas las órdenes
+GET https://localhost:7001/api/orders
+Accept: application/json
+
+### Consultar una orden específica
+GET https://localhost:7001/api/orders/1
+Accept: application/json
