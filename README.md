@@ -1,103 +1,117 @@
-# Sistema de Pedidos de E-Commerce
+# Sistema de Pedidos E-Commerce API
 
-## Descripción
-API REST para gestión de pedidos de una tienda en línea. El sistema permite a los usuarios crear pedidos, agregar productos y gestionar el estado de los mismos.
+API REST para gestión de pedidos de una tienda en línea con autenticación JWT y paginación.
 
-## Entidades del Dominio
+## Características
 
-### Product
-- **Id**: Identificador único del producto
-- **Name**: Nombre del producto
-- **Description**: Descripción del producto
-- **Price**: Precio unitario
-- **StockQuantity**: Cantidad disponible en stock
+- **Autenticación JWT**: Sistema de autenticación basado en tokens JWT
+- **Paginación**: Endpoints paginados para productos y órdenes
+- **Gestión de Productos**: CRUD completo con validaciones de negocio
+- **Gestión de Órdenes**: Creación, modificación y cambio de estados
+- **Reglas de Negocio**: Validaciones para mantener integridad de datos
+- **Entity Framework Core**: Base de datos SQL Server con migraciones
+- **Swagger/OpenAPI**: Documentación automática de la API
 
-### Order
-- **Id**: Identificador único del pedido
-- **CreatedAt**: Fecha de creación
-- **State**: Estado del pedido (Pendiente, Pagado, Enviado)
-- **Items**: Lista de ítems del pedido
-- **Total**: Total calculado del pedido
+## Configuración
 
-### OrderItem
-- **Id**: Identificador único del ítem
-- **OrderId**: ID del pedido al que pertenece
-- **ProductId**: ID del producto
-- **Product**: Referencia al producto
-- **Quantity**: Cantidad del producto
-- **UnitPrice**: Precio unitario al momento de la compra
-- **Subtotal**: Subtotal calculado
+### Credenciales de Acceso
+- **Usuario**: `admin`
+- **Contraseña**: `admin123`
 
-## Reglas de Negocio
-
-### Regla Crítica 1: Productos de Solo Lectura
-- **NO** se permite agregar, eliminar o modificar productos
-- Solo se pueden consultar productos existentes
-
-### Regla Crítica 2: Productos Únicos por Orden
-- **NO** se permite agregar un producto que ya existe en una orden
-- **NO** se permite eliminar productos de una orden
+### Configuración JWT
+- **Clave Secreta**: Configurada en `appsettings.json`
+- **Expiración**: 24 horas por defecto
+- **Emisor**: APIPedidos
+- **Audiencia**: APIPedidosUsers
 
 ## Endpoints
+
+### Autenticación
+
+#### POST /api/auth/login
+Obtener token JWT para autenticación.
+
+**Request Body:**
+```json
+{
+  "username": "admin",
+  "password": "admin123"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "username": "admin",
+  "expiresAt": "2024-01-15T10:30:00Z"
+}
+```
 
 ### Productos
 
 #### GET /api/products
-Obtiene todos los productos disponibles.
+Obtener todos los productos (requiere autenticación).
 
-**Respuesta:**
-```json
-[
-  {
-    "id": 1,
-    "name": "Laptop HP Pavilion",
-    "description": "Laptop de 15 pulgadas con procesador Intel i5",
-    "price": 899.99,
-    "stockQuantity": 10
-  }
-]
-```
+#### GET /api/products/paginated?pageNumber=1&pageSize=10
+Obtener productos paginados (requiere autenticación).
 
-#### GET /api/products/{productId}
-Obtiene un producto específico por su ID.
+**Parámetros:**
+- `pageNumber`: Número de página (default: 1)
+- `pageSize`: Tamaño de página (default: 10, máximo: 100)
 
-**Respuesta:**
+**Response:**
 ```json
 {
-  "id": 1,
-  "name": "Laptop HP Pavilion",
-  "description": "Laptop de 15 pulgadas con procesador Intel i5",
-  "price": 899.99,
-  "stockQuantity": 10
+  "items": [...],
+  "totalCount": 150,
+  "pageNumber": 1,
+  "pageSize": 10,
+  "totalPages": 15,
+  "hasPreviousPage": false,
+  "hasNextPage": true
 }
 ```
 
-### Pedidos
+#### GET /api/products/{id}
+Obtener un producto específico (requiere autenticación).
+
+#### POST /api/products
+Crear un nuevo producto (requiere autenticación).
+
+**Validaciones:**
+- No se permiten nombres duplicados
+
+#### PUT /api/products/{id}
+Actualizar un producto existente (requiere autenticación).
+
+**Validaciones:**
+- No se permiten nombres duplicados
+
+#### DELETE /api/products/{id}
+Eliminar un producto (requiere autenticación).
+
+**Validaciones:**
+- No se puede eliminar si está en órdenes existentes
+
+### Órdenes
 
 #### GET /api/orders
-Obtiene todos los pedidos.
+Obtener todas las órdenes (requiere autenticación).
 
-#### GET /api/orders/{orderId}
-Obtiene un pedido específico por su ID.
+#### GET /api/orders/paginated?pageNumber=1&pageSize=10
+Obtener órdenes paginadas (requiere autenticación).
+
+#### GET /api/orders/{id}
+Obtener una orden específica (requiere autenticación).
 
 #### POST /api/orders
-Crea un nuevo pedido.
-
-**Respuesta:**
-```json
-{
-  "id": 1,
-  "createdAt": "2024-01-15T10:30:00Z",
-  "state": "Pendiente",
-  "total": 0,
-  "items": []
-}
-```
+Crear una nueva orden (requiere autenticación).
 
 #### POST /api/orders/{orderId}/items
-Agrega un ítem a un pedido existente.
+Agregar un ítem a una orden (requiere autenticación).
 
-**Body:**
+**Request Body:**
 ```json
 {
   "productId": 1,
@@ -105,22 +119,14 @@ Agrega un ítem a un pedido existente.
 }
 ```
 
-**Respuesta:**
-```json
-{
-  "id": 1,
-  "productId": 1,
-  "productName": "Laptop HP Pavilion",
-  "quantity": 2,
-  "unitPrice": 899.99,
-  "subtotal": 1799.98
-}
-```
+**Validaciones:**
+- No se puede agregar un producto que ya esté en la orden
+- La cantidad debe ser mayor a 0
 
 #### PUT /api/orders/{orderId}/state
-Actualiza el estado de un pedido.
+Cambiar el estado de una orden (requiere autenticación).
 
-**Body:**
+**Request Body:**
 ```json
 {
   "state": "Pagado"
@@ -128,29 +134,69 @@ Actualiza el estado de un pedido.
 ```
 
 **Estados válidos:**
-- "Pendiente"
-- "Pagado"
-- "Enviado"
+- `Pendiente`
+- `Pagado`
+- `Enviado`
 
-## Ejecución del Proyecto
+## Reglas de Negocio
 
-1. **Clonar el repositorio**
-2. **Navegar al directorio del proyecto**
-3. **Ejecutar el proyecto:**
-   ```bash
-   dotnet run
-   ```
-4. **Acceder a la API:**
-   - Swagger UI: https://localhost:7001/swagger
-   - API Base URL: https://localhost:7001/api
+### Productos
+1. **Nombres únicos**: No se permiten productos con nombres duplicados
+2. **Eliminación restringida**: No se puede eliminar un producto que esté en órdenes existentes
+3. **Stock**: El stock se actualiza automáticamente al agregar productos a órdenes
 
-## Pruebas
+### Órdenes
+1. **Estados**: Las órdenes tienen estados: Pendiente, Pagado, Enviado
+2. **Ítems únicos**: No se puede agregar el mismo producto más de una vez a una orden
+3. **Cálculo automático**: Los subtotales y totales se calculan automáticamente
 
-El archivo `APIPedidos.http` contiene ejemplos de requests para probar todos los endpoints de la API.
+## Base de Datos
 
-## Tecnologías Utilizadas
+### Entidades
+- **Product**: Productos con nombre, descripción, precio y stock
+- **Order**: Órdenes con fecha, estado y total
+- **OrderItem**: Ítems de orden con producto, cantidad y precio unitario
 
-- .NET 9.0
-- ASP.NET Core Web API
-- C# 12
-- OpenAPI/Swagger 
+### Relaciones
+- Una orden puede tener múltiples ítems
+- Un ítem pertenece a una orden y referencia un producto
+- Restricción de eliminación en cascada para productos en órdenes
+
+## Datos de Prueba
+
+El sistema incluye datos de prueba:
+- **150 productos** únicos con nombres incrementales
+- **100 órdenes** con estados variados
+- **Múltiples ítems** por orden
+
+## Uso
+
+### 1. Ejecutar la aplicación
+```bash
+dotnet run
+```
+
+### 2. Acceder a Swagger
+```
+https://localhost:7001/swagger
+```
+
+### 3. Autenticarse
+1. Usar el endpoint `/api/auth/login` con las credenciales
+2. Copiar el token del response
+3. Hacer clic en "Authorize" en Swagger
+4. Ingresar: `Bearer {token}`
+
+### 4. Probar endpoints
+- Todos los endpoints requieren autenticación
+- Usar los endpoints paginados para grandes volúmenes de datos
+- Seguir las reglas de negocio documentadas
+
+## Tecnologías
+
+- **.NET 9.0**
+- **Entity Framework Core**
+- **SQL Server**
+- **JWT Authentication**
+- **Swagger/OpenAPI**
+- **ASP.NET Core Web API** 

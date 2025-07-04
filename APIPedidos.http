@@ -1,50 +1,211 @@
 @APIPedidos_HostAddress = http://localhost:5180
+@APIPedidos_HostAddress_HTTPS = https://localhost:7001
 
 GET {{APIPedidos_HostAddress}}/weatherforecast/
 Accept: application/json
 
-###
-
-### Consultar todos los productos
-GET https://localhost:7001/api/products
-Accept: application/json
-
-### Consultar un producto específico
-GET https://localhost:7001/api/products/1
-Accept: application/json
-
-### Crear un nuevo producto
-POST https://localhost:7001/api/products
+### Login para obtener token JWT
+POST {{APIPedidos_HostAddress_HTTPS}}/api/auth/login
 Content-Type: application/json
 
 {
-  "name": "Nuevo Producto",
-  "description": "Descripción del nuevo producto",
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Login con credenciales inválidas (debe devolver error personalizado)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "usuario_inexistente",
+  "password": "contraseña_incorrecta"
+}
+
+### Login con campos vacíos (debe devolver errores de validación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "",
+  "password": ""
+}
+
+### Variable para almacenar el token (se debe copiar manualmente del response anterior)
+@authToken = YOUR_JWT_TOKEN_HERE
+
+### Consultar todos los productos (requiere autenticación)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/products
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar productos paginados (requiere autenticación)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/products/paginated?pageNumber=1&pageSize=10
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar productos paginados con parámetros inválidos (debe devolver errores)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/products/paginated?pageNumber=0&pageSize=150
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar productos paginados con números negativos (debe devolver errores)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/products/paginated?pageNumber=-1&pageSize=-5
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar un producto específico (requiere autenticación)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/products/1
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar un producto con ID inválido (debe devolver error personalizado)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/products/0
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar un producto con ID negativo (debe devolver error personalizado)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/products/-5
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar un producto inexistente (debe devolver error personalizado)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/products/99999
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Crear un nuevo producto válido (requiere autenticación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/products
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Producto de Prueba",
+  "description": "Descripción del producto de prueba para validaciones",
   "price": 99.99,
   "stockQuantity": 20
 }
 
-### Actualizar un producto existente
-PUT https://localhost:7001/api/products/1
+### Crear un producto con nombre vacío (debe devolver errores de validación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/products
+Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-  "name": "Laptop HP Pavilion Actualizada",
-  "description": "Laptop de 15 pulgadas con procesador Intel i5 - Versión actualizada",
-  "price": 949.99,
-  "stockQuantity": 8
+  "name": "",
+  "description": "Descripción del producto",
+  "price": 99.99,
+  "stockQuantity": 20
 }
 
-### Eliminar un producto (solo si no está en órdenes)
-DELETE https://localhost:7001/api/products/5
-Accept: application/json
-
-### Crear una nueva orden
-POST https://localhost:7001/api/orders
+### Crear un producto con precio negativo (debe devolver errores de validación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/products
+Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
-### Agregar un ítem a la orden (ID 1)
-POST https://localhost:7001/api/orders/1/items
+{
+  "name": "Producto Precio Negativo",
+  "description": "Producto con precio negativo para probar validaciones",
+  "price": -50.00,
+  "stockQuantity": 20
+}
+
+### Crear un producto con stock negativo (debe devolver errores de validación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/products
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Producto Stock Negativo",
+  "description": "Producto con stock negativo para probar validaciones",
+  "price": 50.00,
+  "stockQuantity": -10
+}
+
+### Crear un producto con caracteres especiales en el nombre (debe devolver errores de validación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/products
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Producto @#$%",
+  "description": "Producto con caracteres especiales para probar validaciones",
+  "price": 50.00,
+  "stockQuantity": 20
+}
+
+### Actualizar un producto existente (requiere autenticación)
+PUT {{APIPedidos_HostAddress_HTTPS}}/api/products/1
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Producto 001 Actualizado",
+  "description": "Descripción del producto 001 - Versión actualizada con validaciones",
+  "price": 15.99,
+  "stockQuantity": 95
+}
+
+### Actualizar un producto con ID inválido (debe devolver error personalizado)
+PUT {{APIPedidos_HostAddress_HTTPS}}/api/products/0
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Producto Inválido",
+  "description": "Producto con ID inválido para probar validaciones",
+  "price": 15.99,
+  "stockQuantity": 95
+}
+
+### Eliminar un producto (solo si no está en órdenes) (requiere autenticación)
+DELETE {{APIPedidos_HostAddress_HTTPS}}/api/products/5
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Eliminar un producto con ID inválido (debe devolver error personalizado)
+DELETE {{APIPedidos_HostAddress_HTTPS}}/api/products/0
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar todas las órdenes (requiere autenticación)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/orders
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar órdenes paginadas (requiere autenticación)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/orders/paginated?pageNumber=1&pageSize=10
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar órdenes paginadas con parámetros inválidos (debe devolver errores)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/orders/paginated?pageNumber=0&pageSize=150
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar una orden específica (requiere autenticación)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/orders/1
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar una orden con ID inválido (debe devolver error personalizado)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/orders/0
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Consultar una orden inexistente (debe devolver error personalizado)
+GET {{APIPedidos_HostAddress_HTTPS}}/api/orders/99999
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### Crear una nueva orden (requiere autenticación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/orders
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+### Agregar un ítem a la orden (ID 1) (requiere autenticación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/items
+Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
@@ -52,8 +213,59 @@ Content-Type: application/json
   "quantity": 2
 }
 
-### Agregar otro ítem a la orden (ID 1)
-POST https://localhost:7001/api/orders/1/items
+### Agregar un ítem con ID de orden inválido (debe devolver error personalizado)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/orders/0/items
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 2
+}
+
+### Agregar un ítem con cantidad negativa (debe devolver error personalizado)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/items
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": -5
+}
+
+### Agregar un ítem con cantidad cero (debe devolver error personalizado)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/items
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 0
+}
+
+### Agregar un ítem con cantidad excesiva (debe devolver error personalizado)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/items
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 1000
+}
+
+### Agregar un ítem con producto inexistente (debe devolver error personalizado)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/items
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "productId": 99999,
+  "quantity": 2
+}
+
+### Agregar otro ítem a la orden (ID 1) (requiere autenticación)
+POST {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/items
+Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
@@ -61,26 +273,38 @@ Content-Type: application/json
   "quantity": 1
 }
 
-### Cambiar el estado de la orden a "Pagado"
-PUT https://localhost:7001/api/orders/1/state
+### Cambiar el estado de la orden a "Pagado" (requiere autenticación)
+PUT {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/state
+Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
   "state": "Pagado"
 }
 
-### Cambiar el estado de la orden a "Enviado"
-PUT https://localhost:7001/api/orders/1/state
+### Cambiar el estado de la orden con ID inválido (debe devolver error personalizado)
+PUT {{APIPedidos_HostAddress_HTTPS}}/api/orders/0/state
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "state": "Pagado"
+}
+
+### Cambiar el estado de la orden con estado inválido (debe devolver error personalizado)
+PUT {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/state
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "state": "EstadoInvalido"
+}
+
+### Cambiar el estado de la orden a "Enviado" (requiere autenticación)
+PUT {{APIPedidos_HostAddress_HTTPS}}/api/orders/1/state
+Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
   "state": "Enviado"
 }
-
-### Consultar todas las órdenes
-GET https://localhost:7001/api/orders
-Accept: application/json
-
-### Consultar una orden específica
-GET https://localhost:7001/api/orders/1
-Accept: application/json

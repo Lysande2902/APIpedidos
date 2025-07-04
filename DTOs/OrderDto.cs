@@ -12,4 +12,4 @@ public class OrderResponseDto
 public class UpdateOrderStateDto
 {
     public string State { get; set; } = string.Empty;
-} 
+}

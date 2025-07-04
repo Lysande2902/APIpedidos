@@ -1,60 +1,59 @@
+using APIPedidos.Data;
 using APIPedidos.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace APIPedidos.Services;
 
 public class ProductService : IProductService
 {
+    private readonly ApplicationDbContext _context;
     private readonly IProductValidationService _validationService;
-    private readonly List<Product> _products = new()
-    {
-        new Product { Id = 1, Name = "Laptop HP Pavilion", Description = "Laptop de 15 pulgadas con procesador Intel i5", Price = 899.99m, StockQuantity = 10 },
-        new Product { Id = 2, Name = "Mouse Inalámbrico", Description = "Mouse óptico inalámbrico con sensor de 1200 DPI", Price = 29.99m, StockQuantity = 50 },
-        new Product { Id = 3, Name = "Teclado Mecánico", Description = "Teclado mecánico con switches Cherry MX Blue", Price = 89.99m, StockQuantity = 25 },
-        new Product { Id = 4, Name = "Monitor 24\"", Description = "Monitor LED de 24 pulgadas Full HD", Price = 199.99m, StockQuantity = 15 },
-        new Product { Id = 5, Name = "Auriculares Gaming", Description = "Auriculares con micrófono y cancelación de ruido", Price = 79.99m, StockQuantity = 30 }
-    };
 
-    private int _nextProductId = 6;
-
-    public ProductService(IProductValidationService validationService)
+    public ProductService(ApplicationDbContext context, IProductValidationService validationService)
     {
+        _context = context;
         _validationService = validationService;
     }
 
-    public Task<IEnumerable<Product>> GetAllProductsAsync()
+    public async Task<IEnumerable<Product>> GetAllProductsAsync()
     {
-        return Task.FromResult(_products.AsEnumerable());
+        return await _context.Products.ToListAsync();
     }
 
-    public Task<Product?> GetProductByIdAsync(int id)
+    public async Task<Product?> GetProductByIdAsync(int id)
     {
-        var product = _products.FirstOrDefault(p => p.Id == id);
-        return Task.FromResult(product);
+        return await _context.Products.FindAsync(id);
     }
 
-    public Task<Product> CreateProductAsync(Product product)
+    public async Task<Product> CreateProductAsync(Product product)
     {
-        // Regla de Negocio: No permitir agregar productos con nombre repetido
-        if (_products.Any(p => p.Name.Equals(product.Name, StringComparison.OrdinalIgnoreCase)))
+        // Validar que no exista un producto con el mismo nombre
+        var existingProduct = await _context.Products
+            .FirstOrDefaultAsync(p => p.Name.ToLower() == product.Name.ToLower());
+
+        if (existingProduct != null)
         {
-            throw new InvalidOperationException("A product with this name already exists");
+            throw new InvalidOperationException(ValidationMessages.ProductNameDuplicate);
         }
 
-        product.Id = _nextProductId++;
-        _products.Add(product);
-        return Task.FromResult(product);
+        _context.Products.Add(product);
+        await _context.SaveChangesAsync();
+        return product;
     }
 
-    public Task<Product?> UpdateProductAsync(int id, Product product)
+    public async Task<Product?> UpdateProductAsync(int id, Product product)
     {
-        var existingProduct = _products.FirstOrDefault(p => p.Id == id);
+        var existingProduct = await _context.Products.FindAsync(id);
         if (existingProduct == null)
-            return Task.FromResult<Product?>(null);
+            return null;
 
-        // Regla de Negocio: No permitir cambiar el nombre a uno que ya existe (excepto el mismo producto)
-        if (_products.Any(p => p.Id != id && p.Name.Equals(product.Name, StringComparison.OrdinalIgnoreCase)))
+        // Validar que no exista otro producto con el mismo nombre (excluyendo el actual)
+        var duplicateProduct = await _context.Products
+            .FirstOrDefaultAsync(p => p.Name.ToLower() == product.Name.ToLower() && p.Id != id);
+
+        if (duplicateProduct != null)
         {
-            throw new InvalidOperationException("A product with this name already exists");
+            throw new InvalidOperationException(ValidationMessages.ProductNameDuplicate);
         }
 
         existingProduct.Name = product.Name;
@@ -62,12 +61,13 @@ public class ProductService : IProductService
         existingProduct.Price = product.Price;
         existingProduct.StockQuantity = product.StockQuantity;
 
-        return Task.FromResult<Product?>(existingProduct);
+        await _context.SaveChangesAsync();
+        return existingProduct;
     }
 
     public async Task<bool> DeleteProductAsync(int id)
     {
-        var product = _products.FirstOrDefault(p => p.Id == id);
+        var product = await _context.Products.FindAsync(id);
         if (product == null)
             return false;
 
@@ -75,10 +75,31 @@ public class ProductService : IProductService
         var canDelete = await _validationService.CanDeleteProductAsync(id);
         if (!canDelete)
         {
-            throw new InvalidOperationException("Cannot delete product that is already in existing orders");
+            throw new InvalidOperationException(ValidationMessages.ProductInOrders);
         }
 
-        _products.Remove(product);
+        _context.Products.Remove(product);
+        await _context.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<PaginatedResult<Product>> GetProductsPaginatedAsync(int pageNumber, int pageSize)
+    {
+        var totalCount = await _context.Products.CountAsync();
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+        var products = await _context.Products
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PaginatedResult<Product>
+        {
+            Items = products,
+            TotalCount = totalCount,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            TotalPages = totalPages
+        };
     }
 } 

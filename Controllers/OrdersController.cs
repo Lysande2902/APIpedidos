@@ -1,57 +1,193 @@
 using APIPedidos.DTOs;
 using APIPedidos.Models;
 using APIPedidos.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace APIPedidos.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class OrdersController : ControllerBase
 {
     private readonly IOrderService _orderService;
+    private readonly IValidationService _validationService;
 
-    public OrdersController(IOrderService orderService)
+    public OrdersController(IOrderService orderService, IValidationService validationService)
     {
         _orderService = orderService;
+        _validationService = validationService;
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<OrderResponseDto>>> GetOrders()
+    public async Task<ActionResult<ApiResponse<IEnumerable<OrderResponseDto>>>> GetOrders()
     {
-        var orders = await _orderService.GetAllOrdersAsync();
-        var orderDtos = orders.Select(MapToOrderResponseDto);
-        return Ok(orderDtos);
+        try
+        {
+            var orders = await _orderService.GetAllOrdersAsync();
+            var orderDtos = orders.Select(MapToOrderResponseDto);
+            return Ok(
+                ApiResponse<IEnumerable<OrderResponseDto>>.SuccessResponse(
+                    orderDtos,
+                    "Órdenes obtenidas exitosamente"
+                )
+            );
+        }
+        catch (Exception ex)
+        {
+            // Log detallado para depuración
+            Console.WriteLine($"[ERROR] GET /api/orders: {ex.Message}\n{ex.StackTrace}");
+            return StatusCode(
+                500,
+                ApiResponse<IEnumerable<OrderResponseDto>>.ErrorResponse(
+                    $"{ValidationMessages.ServerError} - {ex.Message}",
+                    new List<string> { ex.StackTrace ?? "" }
+                )
+            );
+        }
+    }
+
+    [HttpGet("paginated")]
+    public async Task<
+        ActionResult<ApiResponse<PaginatedResult<OrderResponseDto>>>
+    > GetOrdersPaginated([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+    {
+        // Validar parámetros de paginación
+        var (isValid, errors) = _validationService.ValidatePagination(pageNumber, pageSize);
+        if (!isValid)
+        {
+            return BadRequest(
+                ApiResponse<PaginatedResult<OrderResponseDto>>.ErrorResponse(
+                    ValidationMessages.InvalidRequest,
+                    errors
+                )
+            );
+        }
+
+        try
+        {
+            var result = await _orderService.GetOrdersPaginatedAsync(pageNumber, pageSize);
+            var orderDtos = result.Items.Select(MapToOrderResponseDto).ToList();
+
+            var paginatedResult = new PaginatedResult<OrderResponseDto>
+            {
+                Items = orderDtos,
+                TotalCount = result.TotalCount,
+                PageNumber = result.PageNumber,
+                PageSize = result.PageSize,
+                TotalPages = result.TotalPages,
+            };
+
+            return Ok(
+                ApiResponse<PaginatedResult<OrderResponseDto>>.SuccessResponse(
+                    paginatedResult,
+                    "Órdenes paginadas obtenidas exitosamente"
+                )
+            );
+        }
+        catch (Exception)
+        {
+            return StatusCode(
+                500,
+                ApiResponse<PaginatedResult<OrderResponseDto>>.ErrorResponse(
+                    ValidationMessages.ServerError
+                )
+            );
+        }
     }
 
     [HttpGet("{orderId}")]
-    public async Task<ActionResult<OrderResponseDto>> GetOrder(int orderId)
+    public async Task<ActionResult<ApiResponse<OrderResponseDto>>> GetOrder(int orderId)
     {
-        var order = await _orderService.GetOrderByIdAsync(orderId);
+        // Validar ID de la orden
+        if (orderId <= 0)
+        {
+            return BadRequest(
+                ApiResponse<OrderResponseDto>.ErrorResponse(ValidationMessages.OrderIdInvalid)
+            );
+        }
 
-        if (order == null)
-            return NotFound();
+        try
+        {
+            var order = await _orderService.GetOrderByIdAsync(orderId);
 
-        return Ok(MapToOrderResponseDto(order));
+            if (order == null)
+            {
+                return NotFound(
+                    ApiResponse<OrderResponseDto>.ErrorResponse(ValidationMessages.OrderNotFound)
+                );
+            }
+
+            return Ok(
+                ApiResponse<OrderResponseDto>.SuccessResponse(
+                    MapToOrderResponseDto(order),
+                    "Orden obtenida exitosamente"
+                )
+            );
+        }
+        catch (Exception)
+        {
+            return StatusCode(
+                500,
+                ApiResponse<OrderResponseDto>.ErrorResponse(ValidationMessages.ServerError)
+            );
+        }
     }
 
     [HttpPost]
-    public async Task<ActionResult<OrderResponseDto>> CreateOrder()
+    public async Task<ActionResult<ApiResponse<OrderResponseDto>>> CreateOrder()
     {
-        var order = await _orderService.CreateOrderAsync();
-        return CreatedAtAction(
-            nameof(GetOrder),
-            new { orderId = order.Id },
-            MapToOrderResponseDto(order)
-        );
+        try
+        {
+            var order = await _orderService.CreateOrderAsync();
+            return CreatedAtAction(
+                nameof(GetOrder),
+                new { orderId = order.Id },
+                ApiResponse<OrderResponseDto>.SuccessResponse(
+                    MapToOrderResponseDto(order),
+                    "Orden creada exitosamente"
+                )
+            );
+        }
+        catch (Exception)
+        {
+            return StatusCode(
+                500,
+                ApiResponse<OrderResponseDto>.ErrorResponse(ValidationMessages.ServerError)
+            );
+        }
     }
 
     [HttpPost("{orderId}/items")]
-    public async Task<ActionResult<OrderItemResponseDto>> AddItemToOrder(
+    public async Task<ActionResult<ApiResponse<OrderItemResponseDto>>> AddItemToOrder(
         int orderId,
         [FromBody] AddOrderItemDto addItemDto
     )
     {
+        // Validar ID de la orden
+        if (orderId <= 0)
+        {
+            return BadRequest(
+                ApiResponse<OrderItemResponseDto>.ErrorResponse(ValidationMessages.OrderIdInvalid)
+            );
+        }
+
+        // Validar ítem de orden
+        var (isValid, errors) = _validationService.ValidateOrderItem(
+            addItemDto.ProductId,
+            addItemDto.Quantity
+        );
+        if (!isValid)
+        {
+            return BadRequest(
+                ApiResponse<OrderItemResponseDto>.ErrorResponse(
+                    ValidationMessages.InvalidRequest,
+                    errors
+                )
+            );
+        }
+
         try
         {
             var orderItem = await _orderService.AddItemToOrderAsync(
@@ -59,37 +195,103 @@ public class OrdersController : ControllerBase
                 addItemDto.ProductId,
                 addItemDto.Quantity
             );
-            return Ok(MapToOrderItemResponseDto(orderItem));
+            return Ok(
+                ApiResponse<OrderItemResponseDto>.SuccessResponse(
+                    MapToOrderItemResponseDto(orderItem),
+                    "Ítem agregado a la orden exitosamente"
+                )
+            );
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(ApiResponse<OrderItemResponseDto>.ErrorResponse(ex.Message));
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(ApiResponse<OrderItemResponseDto>.ErrorResponse(ex.Message));
+        }
+        catch (Exception)
+        {
+            return StatusCode(
+                500,
+                ApiResponse<OrderItemResponseDto>.ErrorResponse(ValidationMessages.ServerError)
+            );
         }
     }
 
     [HttpPut("{orderId}/state")]
-    public async Task<ActionResult> UpdateOrderState(
+    public async Task<ActionResult<ApiResponse>> UpdateOrderState(
         int orderId,
         [FromBody] UpdateOrderStateDto updateStateDto
     )
     {
-        if (!Enum.TryParse<OrderState>(updateStateDto.State, true, out var newState))
+        // Validar ID de la orden
+        if (orderId <= 0)
         {
-            return BadRequest(
-                new { message = "Invalid state. Valid states are: Pendiente, Pagado, Enviado" }
-            );
+            return BadRequest(ApiResponse.ErrorResponse(ValidationMessages.OrderIdInvalid));
         }
 
-        var success = await _orderService.UpdateOrderStateAsync(orderId, newState);
+        // Validar estado
+        var (isValid, errors) = _validationService.ValidateOrderState(updateStateDto.State);
+        if (!isValid)
+        {
+            return BadRequest(ApiResponse.ErrorResponse(ValidationMessages.InvalidRequest, errors));
+        }
 
-        if (!success)
-            return NotFound();
+        try
+        {
+            if (!Enum.TryParse<OrderState>(updateStateDto.State, true, out var newState))
+            {
+                return BadRequest(ApiResponse.ErrorResponse(ValidationMessages.OrderStateInvalid));
+            }
 
-        return NoContent();
+            var success = await _orderService.UpdateOrderStateAsync(orderId, newState);
+
+            if (!success)
+            {
+                return NotFound(ApiResponse.ErrorResponse(ValidationMessages.OrderNotFound));
+            }
+
+            return Ok(ApiResponse.SuccessResponse("Estado de la orden actualizado exitosamente"));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse.ErrorResponse(ex.Message));
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, ApiResponse.ErrorResponse(ValidationMessages.ServerError));
+        }
+    }
+
+    [HttpDelete("{orderId}")]
+    public async Task<ActionResult<ApiResponse>> DeleteOrder(int orderId)
+    {
+        // Validar ID de la orden
+        if (orderId <= 0)
+        {
+            return BadRequest(ApiResponse.ErrorResponse(ValidationMessages.OrderIdInvalid));
+        }
+
+        try
+        {
+            var success = await _orderService.DeleteOrderAsync(orderId);
+
+            if (!success)
+            {
+                return NotFound(ApiResponse.ErrorResponse(ValidationMessages.OrderNotFound));
+            }
+
+            return Ok(ApiResponse.SuccessResponse("Orden eliminada exitosamente"));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse.ErrorResponse(ex.Message));
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, ApiResponse.ErrorResponse(ValidationMessages.ServerError));
+        }
     }
 
     private static OrderResponseDto MapToOrderResponseDto(Order order)
@@ -100,7 +302,9 @@ public class OrdersController : ControllerBase
             CreatedAt = order.CreatedAt,
             State = order.State.ToString(),
             Total = order.Total,
-            Items = order.Items.Select(MapToOrderItemResponseDto).ToList(),
+            Items = (order.Items ?? new List<OrderItem>())
+                .Select(MapToOrderItemResponseDto)
+                .ToList(),
         };
     }
 
@@ -110,7 +314,8 @@ public class OrdersController : ControllerBase
         {
             Id = orderItem.Id,
             ProductId = orderItem.ProductId,
-            ProductName = orderItem.Product.Name,
+            ProductName =
+                orderItem.Product != null ? orderItem.Product.Name : "Producto no disponible",
             Quantity = orderItem.Quantity,
             UnitPrice = orderItem.UnitPrice,
             Subtotal = orderItem.Subtotal,
